@@ -33,6 +33,19 @@ jobs:
           import os
           import zipfile
           from pathlib import Path
+          
+      - name: Find extracted CSV files
+        run: |
+          echo "Searching for CSV files..."
+          find data/extracted -type f -iname "*.csv" -print
+
+          if ! find data/extracted -type f -iname "*.csv" -print -quit | grep -q .; then
+            echo "No CSV found in the extracted archive."
+            echo "Files found in the archive:"
+            find data/extracted -type f -print
+            exit 1
+          fi
+
 
           import requests
 
