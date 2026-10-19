@@ -1,0 +1,75 @@
+
+name: InsightIQ Data Pipeline
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Download and extract dataset
+        env:
+          DRIVE_FILE_ID: 1y_UAbh6esZ1J831gapFDBul-nrF0ScLN
+        run: |
+          python - <<'PY'
+          import os
+          import zipfile
+          from pathlib import Path
+
+          import requests
+
+          file_id = os.environ["DRIVE_FILE_ID"]
+          response = requests.get(
+              "https://drive.google.com/uc",
+              params={"export": "download", "id": file_id},
+              timeout=120,
+          )
+          response.raise_for_status()
+
+          content_type = response.headers.get("Content-Type", "")
+          if "text/html" in content_type.lower():
+              raise RuntimeError(
+                  "Google Drive returned a confirmation page instead of the ZIP. "
+                  "The download needs an additional confirmation step."
+              )
+
+          archive = Path("dataset.zip")
+          archive.write_bytes(response.content)
+
+          if not zipfile.is_zipfile(archive):
+              raise RuntimeError(
+                  "Downloaded file is not a valid ZIP archive. "
+                  "Check the Drive sharing settings and download URL."
+              )
+
+          destination = Path("data/extracted").resolve()
+          destination.mkdir(parents=True, exist_ok=True)
+
+          with zipfile.ZipFile(archive) as zf:
+              for member in zf.infolist():
+                  target = (destination / member.filename).resolve()
+                  if target != destination and destination not in target.parents:
+                      raise RuntimeError("Unsafe ZIP path detected.")
+              zf.extractall(destination)
+
+          archive.unlink()
+          print("Dataset extracted successfully.")
+          PY
